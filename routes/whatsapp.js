@@ -26,4 +26,10 @@ router.post('/:botId/disconnect', async (req, res) => {
   res.json({ success: true, session });
 });
 
+router.post('/:botId/reset', async (req, res) => {
+  const { botId } = req.params;
+  const session = await whatsappManager.reset(botId);
+  res.json({ success: true, session });
+});
+
 export default router;

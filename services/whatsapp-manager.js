@@ -218,6 +218,35 @@ class WhatsappManager {
 
     return this.toPublic(updated);
   }
+
+  async reset(botId) {
+    const key = String(botId);
+    const session = this.sessions.get(key);
+
+    try {
+      await session?.client?.logout();
+      session?.client?.end?.();
+    } catch {
+      // ignore shutdown errors
+    }
+
+    const userDataDir = path.resolve('tokens', `baileys-bot-${botId}`);
+    try {
+      await fs.rm(userDataDir, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup errors
+    }
+
+    const updated = this.updateSession(botId, {
+      status: 'disconnected',
+      lastQr: null,
+      error: null,
+      client: null,
+      retryCount: 0
+    });
+
+    return this.toPublic(updated);
+  }
 }
 
 export const whatsappManager = new WhatsappManager();
