@@ -1,6 +1,8 @@
 import wppconnect from '@wppconnect-team/wppconnect';
 import path from 'path';
 import fs from 'fs/promises';
+import { ai } from './ai-handler.js';
+import { db } from '../database.js';
 
 class WhatsappManager {
   constructor() {
@@ -121,6 +123,26 @@ class WhatsappManager {
         phone,
         client,
         lastQr: null
+      });
+
+      client.onMessage(async (message) => {
+        try {
+          if (!message || message.fromMe || message.isGroupMsg) {
+            return;
+          }
+
+          const body = message.body?.toString().trim();
+          if (!body) return;
+
+          const promptData = await db.getPrompt(botId);
+          const systemPrompt = promptData?.prompt_text || null;
+          const convId = `whatsapp:${botId}:${message.from}`;
+
+          const { text } = await ai.generate(body, systemPrompt, convId);
+          await client.sendText(message.from, text);
+        } catch (error) {
+          console.error('WhatsApp message error:', error);
+        }
       });
 
       return this.toPublic(connectedSession);
