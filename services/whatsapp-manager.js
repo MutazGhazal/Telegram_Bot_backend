@@ -79,9 +79,10 @@ class WhatsappManager {
     });
 
     try {
-    const client = await wppconnect.create({
+      const client = await wppconnect.create({
         session: session.sessionName,
         headless: true,
+        autoClose: 0,
         puppeteerOptions: {
           userDataDir,
           executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
