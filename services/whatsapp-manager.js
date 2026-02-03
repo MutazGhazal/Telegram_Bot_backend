@@ -1,8 +1,14 @@
-import wppconnect from '@wppconnect-team/wppconnect';
 import path from 'path';
 import fs from 'fs/promises';
+import QRCode from 'qrcode';
+import makeWASocket, {
+  fetchLatestBaileysVersion,
+  useMultiFileAuthState
+} from '@whiskeysockets/baileys';
 import { ai } from './ai-handler.js';
 import { db } from '../database.js';
+
+const MAX_HISTORY = 20;
 
 class WhatsappManager {
   constructor() {
@@ -21,13 +27,14 @@ class WhatsappManager {
       connectedAt: data.connectedAt || null,
       updatedAt: data.updatedAt || new Date().toISOString(),
       error: data.error || null,
-      client: data.client || null
+      client: data.client || null,
+      history: data.history || []
     };
   }
 
   toPublic(session) {
     if (!session) return null;
-    const { client, lastQr, ...publicSession } = session;
+    const { client, history, lastQr, ...publicSession } = session;
     return {
       ...publicSession,
       lastQr,
@@ -52,7 +59,7 @@ class WhatsappManager {
     return next;
   }
 
-  async connect(botId, data = {}) {
+  async connect(botId) {
     const key = String(botId);
     const existing = this.sessions.get(key);
 
@@ -62,14 +69,14 @@ class WhatsappManager {
 
     if (existing?.client) {
       try {
-        await existing.client.logout?.();
-        await existing.client.close?.();
+        await existing.client.logout();
+        existing.client.end?.();
       } catch {
         // ignore cleanup errors
       }
     }
 
-    const userDataDir = path.resolve('tokens', `bot-${botId}`);
+    const userDataDir = path.resolve('tokens', `baileys-bot-${botId}`);
     await fs.mkdir(userDataDir, { recursive: true });
 
     const session = this.updateSession(botId, {
@@ -80,102 +87,92 @@ class WhatsappManager {
       error: null
     });
 
-    const createClient = async () => {
-      return wppconnect.create({
-        session: session.sessionName,
-        headless: true,
-        autoClose: 0,
-        puppeteerOptions: {
-          userDataDir,
-          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-          timeout: 120000,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu'
-          ]
-        },
-        catchQR: (base64Qrimg) => {
+    try {
+      const { state, saveCreds } = await useMultiFileAuthState(userDataDir);
+      const { version } = await fetchLatestBaileysVersion();
+
+      const sock = makeWASocket({
+        auth: state,
+        version,
+        printQRInTerminal: false,
+        syncFullHistory: false
+      });
+
+      sock.ev.on('creds.update', saveCreds);
+
+      sock.ev.on('connection.update', async (update) => {
+        if (update.qr) {
+          const qrDataUrl = await QRCode.toDataURL(update.qr);
           this.updateSession(botId, {
             status: 'qr',
-            lastQr: base64Qrimg,
+            lastQr: qrDataUrl,
             lastQrAt: new Date().toISOString()
           });
-        },
-        statusFind: (statusSession) => {
+        }
+
+        if (update.connection === 'open') {
+          const userId = sock.user?.id || '';
+          const phone = userId ? `+${userId.split('@')[0]}` : session.phone;
           this.updateSession(botId, {
-            status: String(statusSession || '').toLowerCase() || 'connecting'
+            status: 'connected',
+            connectedAt: new Date().toISOString(),
+            phone,
+            client: sock,
+            lastQr: null,
+            error: null
+          });
+        }
+
+        if (update.connection === 'close') {
+          this.updateSession(botId, {
+            status: 'disconnected',
+            client: null
           });
         }
       });
-    };
 
-    try {
-      const client = await createClient();
+      sock.ev.on('messages.upsert', async ({ messages, type }) => {
+        if (type !== 'notify') return;
+        const message = messages?.[0];
+        if (!message || message.key?.fromMe) return;
 
-      let phone = session.phone;
-      const wid = client?.info?.wid?.user || client?.info?.me?.user;
-      if (!phone && wid) {
-        phone = `+${wid}`;
-      }
+        const remoteJid = message.key?.remoteJid || '';
+        if (remoteJid.endsWith('@g.us')) return;
 
-      const connectedSession = this.updateSession(botId, {
-        status: 'connected',
-        connectedAt: new Date().toISOString(),
-        phone,
-        client,
-        lastQr: null
-      });
+        const text =
+          message.message?.conversation ||
+          message.message?.extendedTextMessage?.text ||
+          message.message?.imageMessage?.caption ||
+          message.message?.videoMessage?.caption ||
+          '';
 
-      client.onMessage(async (message) => {
+        if (!text.trim()) return;
+
         try {
-          if (!message || message.fromMe || message.isGroupMsg) {
-            return;
-          }
-
-          const body = message.body?.toString().trim();
-          if (!body) return;
-
           const promptData = await db.getPrompt(botId);
           const systemPrompt = promptData?.prompt_text || null;
-          const convId = `whatsapp:${botId}:${message.from}`;
+          const convId = `whatsapp:${botId}:${remoteJid}`;
+          const { text: reply } = await ai.generate(
+            text,
+            systemPrompt,
+            convId
+          );
 
-          const { text } = await ai.generate(body, systemPrompt, convId);
-          await client.sendText(message.from, text);
+          await sock.sendMessage(remoteJid, { text: reply || '...' });
         } catch (error) {
           console.error('WhatsApp message error:', error);
         }
       });
 
-      return this.toPublic(connectedSession);
+      return this.toPublic(
+        this.updateSession(botId, {
+          client: sock
+        })
+      );
     } catch (error) {
-      const message = error?.message || 'Failed to connect.';
-      if (message.includes('browser is already running')) {
-        try {
-          await fs.rm(userDataDir, { recursive: true, force: true });
-          await fs.mkdir(userDataDir, { recursive: true });
-          const client = await createClient();
-          const connectedSession = this.updateSession(botId, {
-            status: 'connected',
-            connectedAt: new Date().toISOString(),
-            phone: session.phone,
-            client,
-            lastQr: null
-          });
-          return this.toPublic(connectedSession);
-        } catch (retryError) {
-          const failed = this.updateSession(botId, {
-            status: 'error',
-            error: retryError?.message || message
-          });
-          return this.toPublic(failed);
-        }
-      }
-
       const failed = this.updateSession(botId, {
         status: 'error',
-        error: message
+        error: error?.message || 'Failed to connect.'
       });
       return this.toPublic(failed);
     }
@@ -186,8 +183,8 @@ class WhatsappManager {
     const session = this.sessions.get(key);
 
     try {
-      await session?.client?.logout?.();
-      await session?.client?.close?.();
+      await session?.client?.logout();
+      session?.client?.end?.();
     } catch {
       // ignore shutdown errors
     }
