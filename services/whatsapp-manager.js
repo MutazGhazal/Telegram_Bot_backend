@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import QRCode from 'qrcode';
 import makeWASocket, {
+  DisconnectReason,
   fetchLatestBaileysVersion,
   useMultiFileAuthState
 } from '@whiskeysockets/baileys';
@@ -28,7 +29,8 @@ class WhatsappManager {
       updatedAt: data.updatedAt || new Date().toISOString(),
       error: data.error || null,
       client: data.client || null,
-      history: data.history || []
+      history: data.history || [],
+      retryCount: data.retryCount || 0
     };
   }
 
@@ -101,6 +103,10 @@ class WhatsappManager {
       sock.ev.on('creds.update', saveCreds);
 
       sock.ev.on('connection.update', async (update) => {
+        if (update.connection === 'connecting') {
+          this.updateSession(botId, { status: 'connecting' });
+        }
+
         if (update.qr) {
           const qrDataUrl = await QRCode.toDataURL(update.qr);
           this.updateSession(botId, {
@@ -119,15 +125,29 @@ class WhatsappManager {
             phone,
             client: sock,
             lastQr: null,
-            error: null
+            error: null,
+            retryCount: 0
           });
         }
 
         if (update.connection === 'close') {
+          const statusCode = update?.lastDisconnect?.error?.output?.statusCode;
+          const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+          const nextRetry = (this.sessions.get(key)?.retryCount || 0) + 1;
+
           this.updateSession(botId, {
             status: 'disconnected',
-            client: null
+            client: null,
+            retryCount: nextRetry,
+            error: isLoggedOut ? 'Session logged out.' : null
           });
+
+          if (!isLoggedOut && nextRetry <= 3) {
+            const delayMs = 3000 * nextRetry;
+            setTimeout(() => {
+              this.connect(botId);
+            }, delayMs);
+          }
         }
       });
 
