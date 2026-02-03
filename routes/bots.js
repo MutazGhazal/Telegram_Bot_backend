@@ -3,6 +3,7 @@ import TelegramBot from 'node-telegram-bot-api';
 import { db } from '../database.js';
 import { botManager } from '../services/telegram-bot.js';
 import config from '../config.js';
+import { decrypt } from '../utils/encryption.js';
 
 const router = express.Router();
 
@@ -82,6 +83,21 @@ router.get('/:botId/info', async (req, res) => {
         model: config.openrouter.model
       }
     });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+router.get('/:botId/token', async (req, res) => {
+  try {
+    const { botId } = req.params;
+    const bot = await db.getBot(botId);
+    if (!bot) {
+      return res.status(404).json({ error: 'البوت غير موجود' });
+    }
+
+    const token = decrypt(bot.bot_token);
+    return res.json({ token });
   } catch (error) {
     return res.status(400).json({ error: error.message });
   }

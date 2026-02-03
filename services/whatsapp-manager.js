@@ -135,6 +135,7 @@ class WhatsappManager {
         if (update.connection === 'close') {
           const statusCode = update?.lastDisconnect?.error?.output?.statusCode;
           const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+          const needsRestart = statusCode === DisconnectReason.restartRequired;
           const current = this.sessions.get(key);
           const nextRetry = (current?.retryCount || 0) + 1;
           const wasManual = current?.manualDisconnect;
@@ -146,6 +147,19 @@ class WhatsappManager {
               retryCount: nextRetry,
               error: isLoggedOut ? 'Session logged out.' : null
             });
+            return;
+          }
+
+          if (needsRestart) {
+            this.updateSession(botId, {
+              status: 'connecting',
+              client: null,
+              retryCount: nextRetry,
+              error: null
+            });
+            setTimeout(() => {
+              this.reconnect(botId);
+            }, 1000);
             return;
           }
 
@@ -233,6 +247,26 @@ class WhatsappManager {
     });
 
     return this.toPublic(updated);
+  }
+
+  async reconnect(botId) {
+    const key = String(botId);
+    const session = this.sessions.get(key);
+
+    try {
+      await session?.client?.logout();
+      session?.client?.end?.();
+    } catch {
+      // ignore shutdown errors
+    }
+
+    this.updateSession(botId, {
+      status: 'connecting',
+      error: null,
+      manualDisconnect: false
+    });
+
+    return this.connect(botId);
   }
 
   async reset(botId) {
