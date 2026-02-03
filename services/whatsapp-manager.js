@@ -70,7 +70,6 @@ class WhatsappManager {
     }
 
     const userDataDir = path.resolve('tokens', `bot-${botId}`);
-    await fs.rm(userDataDir, { recursive: true, force: true });
     await fs.mkdir(userDataDir, { recursive: true });
 
     const session = this.updateSession(botId, {
@@ -81,8 +80,8 @@ class WhatsappManager {
       error: null
     });
 
-    try {
-      const client = await wppconnect.create({
+    const createClient = async () => {
+      return wppconnect.create({
         session: session.sessionName,
         headless: true,
         autoClose: 0,
@@ -110,6 +109,10 @@ class WhatsappManager {
           });
         }
       });
+    };
+
+    try {
+      const client = await createClient();
 
       let phone = session.phone;
       const wid = client?.info?.wid?.user || client?.info?.me?.user;
@@ -147,9 +150,32 @@ class WhatsappManager {
 
       return this.toPublic(connectedSession);
     } catch (error) {
+      const message = error?.message || 'Failed to connect.';
+      if (message.includes('browser is already running')) {
+        try {
+          await fs.rm(userDataDir, { recursive: true, force: true });
+          await fs.mkdir(userDataDir, { recursive: true });
+          const client = await createClient();
+          const connectedSession = this.updateSession(botId, {
+            status: 'connected',
+            connectedAt: new Date().toISOString(),
+            phone: session.phone,
+            client,
+            lastQr: null
+          });
+          return this.toPublic(connectedSession);
+        } catch (retryError) {
+          const failed = this.updateSession(botId, {
+            status: 'error',
+            error: retryError?.message || message
+          });
+          return this.toPublic(failed);
+        }
+      }
+
       const failed = this.updateSession(botId, {
         status: 'error',
-        error: error?.message || 'Failed to connect.'
+        error: message
       });
       return this.toPublic(failed);
     }
