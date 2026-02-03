@@ -31,7 +31,8 @@ class WhatsappManager {
       client: data.client || null,
       history: data.history || [],
       retryCount: data.retryCount || 0,
-      manualDisconnect: data.manualDisconnect || false
+      manualDisconnect: data.manualDisconnect || false,
+      reconnecting: data.reconnecting || false
     };
   }
 
@@ -62,11 +63,11 @@ class WhatsappManager {
     return next;
   }
 
-  async connect(botId) {
+  async connect(botId, force = false) {
     const key = String(botId);
     const existing = this.sessions.get(key);
 
-    if (existing?.status === 'connected' || existing?.status === 'connecting') {
+    if (!force && (existing?.status === 'connected' || existing?.status === 'connecting')) {
       return this.toPublic(existing);
     }
 
@@ -88,7 +89,8 @@ class WhatsappManager {
       webhookUrl: existing?.webhookUrl || null,
       status: 'connecting',
       error: null,
-      manualDisconnect: false
+      manualDisconnect: false,
+      reconnecting: false
     });
 
     try {
@@ -155,11 +157,12 @@ class WhatsappManager {
               status: 'connecting',
               client: null,
               retryCount: nextRetry,
-              error: null
+              error: null,
+              reconnecting: true
             });
             setTimeout(() => {
               this.reconnect(botId);
-            }, 1000);
+            }, 5000);
             return;
           }
 
@@ -167,7 +170,8 @@ class WhatsappManager {
             status: 'connecting',
             client: null,
             retryCount: nextRetry,
-            error: null
+            error: null,
+            reconnecting: true
           });
 
           if (nextRetry <= 5) {
@@ -243,7 +247,8 @@ class WhatsappManager {
       error: null,
       client: null,
       retryCount: 0,
-      manualDisconnect: true
+      manualDisconnect: true,
+      reconnecting: false
     });
 
     return this.toPublic(updated);
@@ -262,10 +267,11 @@ class WhatsappManager {
     this.updateSession(botId, {
       status: 'connecting',
       error: null,
-      manualDisconnect: false
+      manualDisconnect: false,
+      reconnecting: true
     });
 
-    return this.connect(botId);
+    return this.connect(botId, true);
   }
 
   async reset(botId) {
@@ -292,7 +298,8 @@ class WhatsappManager {
       error: null,
       client: null,
       retryCount: 0,
-      manualDisconnect: true
+      manualDisconnect: true,
+      reconnecting: false
     });
 
     return this.toPublic(updated);
