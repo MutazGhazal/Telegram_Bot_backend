@@ -30,7 +30,8 @@ class WhatsappManager {
       error: data.error || null,
       client: data.client || null,
       history: data.history || [],
-      retryCount: data.retryCount || 0
+      retryCount: data.retryCount || 0,
+      manualDisconnect: data.manualDisconnect || false
     };
   }
 
@@ -86,7 +87,8 @@ class WhatsappManager {
       phone: existing?.phone || null,
       webhookUrl: existing?.webhookUrl || null,
       status: 'connecting',
-      error: null
+      error: null,
+      manualDisconnect: false
     });
 
     try {
@@ -133,16 +135,28 @@ class WhatsappManager {
         if (update.connection === 'close') {
           const statusCode = update?.lastDisconnect?.error?.output?.statusCode;
           const isLoggedOut = statusCode === DisconnectReason.loggedOut;
-          const nextRetry = (this.sessions.get(key)?.retryCount || 0) + 1;
+          const current = this.sessions.get(key);
+          const nextRetry = (current?.retryCount || 0) + 1;
+          const wasManual = current?.manualDisconnect;
+
+          if (wasManual || isLoggedOut) {
+            this.updateSession(botId, {
+              status: 'disconnected',
+              client: null,
+              retryCount: nextRetry,
+              error: isLoggedOut ? 'Session logged out.' : null
+            });
+            return;
+          }
 
           this.updateSession(botId, {
-            status: 'disconnected',
+            status: 'connecting',
             client: null,
             retryCount: nextRetry,
-            error: isLoggedOut ? 'Session logged out.' : null
+            error: null
           });
 
-          if (!isLoggedOut && nextRetry <= 3) {
+          if (nextRetry <= 5) {
             const delayMs = 3000 * nextRetry;
             setTimeout(() => {
               this.connect(botId);
@@ -213,7 +227,9 @@ class WhatsappManager {
       status: 'disconnected',
       lastQr: null,
       error: null,
-      client: null
+      client: null,
+      retryCount: 0,
+      manualDisconnect: true
     });
 
     return this.toPublic(updated);
@@ -242,7 +258,8 @@ class WhatsappManager {
       lastQr: null,
       error: null,
       client: null,
-      retryCount: 0
+      retryCount: 0,
+      manualDisconnect: true
     });
 
     return this.toPublic(updated);
