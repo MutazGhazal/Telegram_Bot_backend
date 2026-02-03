@@ -3,6 +3,12 @@ import { createBot, getBot, getUserBot, deleteBot } from './database/bots.js';
 import { savePrompt, getPrompt, deactivatePrompt } from './database/prompts.js';
 import { saveMessage } from './database/messages.js';
 import { getOrCreateConversation } from './database/conversations.js';
+import {
+  saveMessengerSession,
+  getMessengerSession,
+  getMessengerSessionByPage,
+  updateMessengerStatus
+} from './database/messenger.js';
 
 export { supabase };
 
@@ -15,5 +21,9 @@ export const db = {
   getPrompt,
   deactivatePrompt,
   saveMessage,
-  getOrCreateConversation
+  getOrCreateConversation,
+  saveMessengerSession,
+  getMessengerSession,
+  getMessengerSessionByPage,
+  updateMessengerStatus
 };

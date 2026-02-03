@@ -8,6 +8,7 @@ import analyticsRoutes from './routes/analytics.js';
 import conversationsRoutes from './routes/conversations.js';
 import filesRoutes from './routes/files.js';
 import whatsappRoutes from './routes/whatsapp.js';
+import messengerRoutes from './routes/messenger.js';
 import config from './config.js';
 
 const app = express();
@@ -34,6 +35,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/files', filesRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/messenger', messengerRoutes);
 
 app.get('/', (req, res) => {
   res.json({

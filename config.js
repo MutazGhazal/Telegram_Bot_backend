@@ -23,6 +23,10 @@ const config = {
     siteUrl: process.env.OPENROUTER_SITE_URL || '',
     appName: process.env.OPENROUTER_APP_NAME || 'NP AI Bot'
   },
+  messenger: {
+    verifyToken: process.env.MESSENGER_VERIFY_TOKEN,
+    apiVersion: process.env.MESSENGER_API_VERSION || 'v19.0'
+  },
   encryption: {
     key: process.env.ENCRYPTION_KEY
   },
