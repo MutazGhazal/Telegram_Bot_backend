@@ -254,7 +254,6 @@ class WhatsappManager {
     const session = this.sessions.get(key);
 
     try {
-      await session?.client?.logout();
       session?.client?.end?.();
     } catch {
       // ignore shutdown errors
