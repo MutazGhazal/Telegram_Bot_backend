@@ -79,11 +79,20 @@ class WhatsappManager {
     });
 
     try {
-      const client = await wppconnect.create({
+    const client = await wppconnect.create({
         session: session.sessionName,
         headless: true,
         puppeteerOptions: {
-          userDataDir
+          userDataDir,
+          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--no-zygote',
+            '--single-process'
+          ]
         },
         catchQR: (base64Qrimg) => {
           this.updateSession(botId, {
