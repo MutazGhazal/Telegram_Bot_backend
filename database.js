@@ -7,8 +7,13 @@ import {
   saveMessengerSession,
   getMessengerSession,
   getMessengerSessionByPage,
-  updateMessengerStatus
+  updateMessengerStatus,
+  deleteMessengerSession
 } from './database/messenger.js';
+import {
+  getInstagramSession,
+  deleteInstagramSession
+} from './database/instagram.js';
 
 export { supabase };
 
@@ -25,5 +30,8 @@ export const db = {
   saveMessengerSession,
   getMessengerSession,
   getMessengerSessionByPage,
-  updateMessengerStatus
+  updateMessengerStatus,
+  deleteMessengerSession,
+  getInstagramSession,
+  deleteInstagramSession
 };

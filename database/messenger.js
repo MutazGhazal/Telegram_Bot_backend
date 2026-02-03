@@ -49,3 +49,14 @@ export async function updateMessengerStatus(botId, status) {
 
   return error ? null : data;
 }
+
+export async function deleteMessengerSession(botId) {
+  const { data, error } = await supabase
+    .from('messenger_sessions')
+    .delete()
+    .eq('bot_id', botId)
+    .select()
+    .single();
+
+  return error ? null : data;
+}

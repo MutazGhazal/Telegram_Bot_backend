@@ -11,6 +11,12 @@ router.get('/:botId/status', (req, res) => {
 
 router.post('/:botId/connect', async (req, res) => {
   const { botId } = req.params;
+  const current = whatsappManager.getStatus(botId);
+  if (current?.status === 'connected' || current?.status === 'connecting') {
+    return res
+      .status(409)
+      .json({ error: 'واتساب مربوط بالفعل. قم بالفصل أو الحذف أولاً.' });
+  }
   const session = await whatsappManager.connect(botId, {});
 
   if (session.status === 'error') {

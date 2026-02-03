@@ -18,6 +18,12 @@ router.post('/:botId/connect', async (req, res) => {
   try {
     const { botId } = req.params;
     const { page_id, page_access_token, webhook_url } = req.body || {};
+    const existing = await db.getMessengerSession(botId);
+    if (existing?.status === 'connected') {
+      return res
+        .status(409)
+        .json({ error: 'مسنجر مربوط بالفعل. قم بالحذف أولاً.' });
+    }
     const session = await db.saveMessengerSession(botId, {
       page_id,
       page_access_token,
@@ -38,6 +44,15 @@ router.post('/:botId/connect', async (req, res) => {
 router.post('/:botId/disconnect', async (req, res) => {
   try {
     const session = await db.updateMessengerStatus(req.params.botId, 'disconnected');
+    return res.json({ success: true, session });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+router.post('/:botId/reset', async (req, res) => {
+  try {
+    const session = await db.deleteMessengerSession(req.params.botId);
     return res.json({ success: true, session });
   } catch (error) {
     return res.status(400).json({ error: error.message });
