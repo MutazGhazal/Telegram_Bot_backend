@@ -70,6 +70,7 @@ class WhatsappManager {
     }
 
     const userDataDir = path.resolve('tokens', `bot-${botId}`);
+    await fs.rm(userDataDir, { recursive: true, force: true });
     await fs.mkdir(userDataDir, { recursive: true });
 
     const session = this.updateSession(botId, {
@@ -88,13 +89,12 @@ class WhatsappManager {
         puppeteerOptions: {
           userDataDir,
           executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+          timeout: 120000,
           args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--no-zygote',
-            '--single-process'
+            '--disable-gpu'
           ]
         },
         catchQR: (base64Qrimg) => {
